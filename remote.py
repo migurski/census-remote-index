@@ -38,8 +38,9 @@ class RemoteFileObject:
         """
         """
         conn = HTTPConnection(self.host)
-        conn.request('GET', self.rest, headers={'Range': '0-0'})
-        length = int(conn.getresponse().getheader('Content-Length'))
+        conn.request('HEAD', self.rest)
+        resp = conn.getresponse()
+        length = int(resp.getheader('Content-Length'))
         
         if self.verbose:
             print(length, 'bytes in', basename(self.rest), file=stderr)
