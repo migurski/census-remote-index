@@ -2,14 +2,14 @@
 
 Implements a file-like object that can read from a remote URL using ranges.
 '''
-from urllib.parse import urlparse
-from http.client import HTTPConnection
 from os import SEEK_SET, SEEK_CUR, SEEK_END
 from sys import stderr
 from time import time
 from os.path import basename
 from datetime import timedelta
 from io import BytesIO
+
+import requests
 
 class RemoteFileObject:
     """ Implement enough of this to be useful:
@@ -20,12 +20,7 @@ class RemoteFileObject:
 
     def __init__(self, url, verbose=False, block_size=(16 * 1024)):
         self.verbose = verbose
-
-        # scheme://host/path;parameters?query#fragment
-        (scheme, host, path, parameters, query, fragment) = urlparse(url)
-        
-        self.host = host
-        self.rest = path + (query and ('?' + query) or '')
+        self.url = url
 
         self.offset = 0
         self.length = self._get_length()
@@ -37,13 +32,11 @@ class RemoteFileObject:
     def _get_length(self):
         """
         """
-        conn = HTTPConnection(self.host)
-        conn.request('HEAD', self.rest)
-        resp = conn.getresponse()
-        length = int(resp.getheader('Content-Length'))
+        resp = requests.head(self.url)
+        length = int(resp.headers['Content-Length'])
         
         if self.verbose:
-            print(length, 'bytes in', basename(self.rest), file=stderr)
+            print(length, 'bytes in', basename(self.url), file=stderr)
 
         return length
 
@@ -51,10 +44,9 @@ class RemoteFileObject:
         """
         """
         headers = {'Range': 'bytes={}-{}'.format(start, end)}
+        resp = requests.get(self.url, headers=headers)
 
-        conn = HTTPConnection(self.host)
-        conn.request('GET', self.rest, headers=headers)
-        return conn.getresponse().read()
+        return resp.content
 
     def read(self, count=None):
         """ Read /count/ bytes from the resource at the current offset.
@@ -77,7 +69,7 @@ class RemoteFileObject:
                     expect = (time() - self.start_time) // loaded
                     remain = max(0, int(expect * (1 - loaded)))
                     print('{:.1f}%'.format(min(100, 100 * loaded)), end=' ', file=stderr)
-                    print('of', basename(self.rest), end=' ', file=stderr)
+                    print('of', basename(self.url), end=' ', file=stderr)
                     print('with', timedelta(seconds=remain), 'to go', file=stderr)
 
             chunk = self.chunks[chunk_offset]
